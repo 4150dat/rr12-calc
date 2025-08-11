@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>손익비 1.2 – 익절가 자동 계산기</title>
+  <meta name="description" content="진입가와 손절가만 입력하면 손익비 1.2 기준 익절가를 자동으로 계산합니다. 롱/숏 자동판별." />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    html, body { height: 100%; }
+    body { font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Noto Sans, "Apple SD Gothic Neo", "Malgun Gothic", "맑은 고딕", sans-serif; }
+    .card { box-shadow: 0 10px 30px rgba(0,0,0,.08), 0 6px 12px rgba(0,0,0,.05); }
+    .btn-grad { background: linear-gradient(135deg, #0077ff 0%, #0061e0 50%, #0050c8 100%); }
+    .input:focus { outline: none; box-shadow: 0 0 0 4px rgba(0,119,255,.15); border-color: #0077ff; }
+  </style>
+</head>
+<body class="min-h-full bg-slate-50 flex items-center justify-center py-10 px-4">
+  <main class="w-full max-w-xl">
+    <section class="bg-white card rounded-3xl p-8 md:p-10">
+      <h1 class="text-3xl md:text-4xl font-semibold text-blue-700">가격 기반 손익비 계산</h1>
+      <p class="text-slate-500 mt-2">손익비 <span class="font-semibold">1.2</span> 고정. 진입가와 손절가만 입력하면 <span class="font-medium">익절가</span>가 계산됩니다. (롱/숏 자동 판별)</p>
+
+      <div class="mt-8 space-y-6">
+        <div>
+          <label class="block text-slate-700 font-semibold mb-2" for="entry">진입가</label>
+          <input id="entry" class="input w-full rounded-2xl border border-slate-200 px-5 py-4 text-lg" placeholder="예: 121190.5" inputmode="decimal" />
+        </div>
+        <div>
+          <label class="block text-slate-700 font-semibold mb-2" for="stop">손절가</label>
+          <input id="stop" class="input w-full rounded-2xl border border-slate-200 px-5 py-4 text-lg" placeholder="예: 121090" inputmode="decimal" />
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="rounded-2xl border border-slate-200 p-4">
+            <div class="text-slate-500 text-sm">포지션</div>
+            <div id="side" class="text-lg font-semibold mt-1">-</div>
+          </div>
+          <div class="rounded-2xl border border-slate-200 p-4">
+            <div class="text-slate-500 text-sm">리스크(가격차)</div>
+            <div id="risk" class="text-lg font-semibold mt-1">-</div>
+          </div>
+          <div class="rounded-2xl border border-slate-200 p-4">
+            <div class="text-slate-500 text-sm">손익비(R:R)</div>
+            <div id="rr" class="text-lg font-semibold mt-1">1 : 1.2</div>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-slate-700 font-semibold mb-2" for="target">익절가 (자동 계산)</label>
+          <div class="flex items-center gap-3">
+            <input readonly id="target" class="w-full rounded-2xl border border-slate-200 px-5 py-4 text-xl font-semibold bg-slate-50" placeholder="-" />
+            <button id="copyBtn" class="btn-grad text-white px-5 py-4 rounded-2xl font-semibold disabled:opacity-50" disabled>복사</button>
+          </div>
+          <p id="hint" class="text-slate-500 text-sm mt-2"></p>
+        </div>
+
+        <div class="flex flex-wrap gap-3 pt-2">
+          <button id="calcBtn" class="btn-grad text-white px-6 py-4 rounded-2xl text-lg font-semibold">손익비 분석하기</button>
+          <button id="resetBtn" class="px-6 py-4 rounded-2xl border border-slate-300 text-slate-700 font-semibold bg-white">초기화</button>
+        </div>
+
+        <details class="mt-4 group">
+          <summary class="cursor-pointer select-none text-slate-600">계산식 보기</summary>
+          <div class="mt-2 text-slate-600 text-sm leading-6">
+            <p>손익비 1.2 기준:</p>
+            <ul class="list-disc ml-5 mt-1">
+              <li><span class="font-medium">롱</span>일 때: <code>리스크 = 진입가 − 손절가</code>, <code>익절가 = 진입가 + 1.2 × 리스크</code></li>
+              <li><span class="font-medium">숏</span>일 때: <code>리스크 = 손절가 − 진입가</code>, <code>익절가 = 진입가 − 1.2 × 리스크</code></li>
+              <li>손절가가 진입가보다 낮으면 롱, 높으면 숏으로 자동 판별합니다.</li>
+            </ul>
+          </div>
+        </details>
+      </div>
+    </section>
+
+    <footer class="text-center text-slate-400 text-xs mt-6">
+      © <span id="year"></span> RR 1.2 Calculator · No tracking · Client‑only
+    </footer>
+  </main>
+
+  <script>
+    const R = 1.2; // 손익비 고정
+    const entryEl = document.getElementById('entry');
+    const stopEl = document.getElementById('stop');
+    const targetEl = document.getElementById('target');
+    const sideEl = document.getElementById('side');
+    const riskEl = document.getElementById('risk');
+    const rrEl = document.getElementById('rr');
+    const hintEl = document.getElementById('hint');
+    const calcBtn = document.getElementById('calcBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const copyBtn = document.getElementById('copyBtn');
+
+    document.getElementById('year').textContent = new Date().getFullYear();
+
+    function parseNum(v){
+      if(typeof v === 'number') return v;
+      const s = (v||'').toString().replace(/,/g,'').trim();
+      if(s === '') return NaN;
+      return Number(s);
+    }
+
+    function decimalsOf(num){
+      const s = String(num);
+      const idx = s.indexOf('.')
+      return idx === -1 ? 0 : (s.length - idx - 1);
+    }
+
+    function format(num, digits){
+      try { return Number(num).toLocaleString('en-US', { maximumFractionDigits: digits, minimumFractionDigits: Math.min(digits, 8) }); }
+      catch { return String(num); }
+    }
+
+    function compute(){
+      const entry = parseNum(entryEl.value);
+      const stop = parseNum(stopEl.value);
+
+      // 기본 유효성 검사
+      if(Number.isNaN(entry) || Number.isNaN(stop)){
+        hintEl.textContent = '숫자를 정확히 입력해주세요.';
+        setOutputs('-', '-', '-', false);
+        return;
+      }
+      if(entry === stop){
+        hintEl.textContent = '진입가와 손절가가 같습니다. 손절가가 더 낮으면 롱, 더 높으면 숏입니다.';
+        setOutputs('-', '-', '-', false);
+        return;
+      }
+
+      const side = stop < entry ? '롱 (Long)' : '숏 (Short)';
+      const risk = stop < entry ? (entry - stop) : (stop - entry);
+      const target = stop < entry ? (entry + R * risk) : (entry - R * risk);
+      const digits = Math.max(decimalsOf(entryEl.value), decimalsOf(stopEl.value), 0);
+
+      sideEl.textContent = side;
+      riskEl.textContent = format(risk, Math.min(Math.max(digits, 0), 8));
+      rrEl.textContent = `1 : ${R}`;
+      targetEl.value = format(target, Math.min(Math.max(digits, 0), 8));
+      hintEl.textContent = `${side.replace(/ \(.*\)/,'')} 기준: 리스크 = ${format(risk, digits)} → 익절가 = ${format(target, digits)}`;
+      copyBtn.disabled = false;
+    }
+
+    function setOutputs(side, risk, target, canCopy){
+      sideEl.textContent = side; riskEl.textContent = risk; targetEl.value = target; copyBtn.disabled = !canCopy;
+    }
+
+    function reset(){
+      entryEl.value = ''; stopEl.value = ''; targetEl.value = ''; sideEl.textContent='-'; riskEl.textContent='-'; hintEl.textContent=''; copyBtn.disabled = true;
+    }
+
+    calcBtn.addEventListener('click', compute);
+    resetBtn.addEventListener('click', reset);
+    entryEl.addEventListener('input', () => hintEl.textContent = '');
+    stopEl.addEventListener('input', () => hintEl.textContent = '');
+
+    copyBtn.addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(targetEl.value); copyBtn.textContent = '복사됨!'; setTimeout(() => copyBtn.textContent = '복사', 1200); } catch(e){ alert('복사에 실패했습니다: ' + e.message); }
+    });
+
+    // Enter 키로 계산
+    [entryEl, stopEl].forEach(el => el.addEventListener('keydown', (e) => { if(e.key === 'Enter') compute(); }));
+  </script>
+</body>
+</html>
